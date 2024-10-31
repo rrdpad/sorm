@@ -1,15 +1,17 @@
+use clap::{builder::OsStr, Parser};
 use rand::Rng;
 use rodio::{source::Source, Decoder, OutputStream};
-use std::fs::{self, File};
-use std::io::{self, BufReader};
-use std::path::PathBuf;
-use std::process::exit;
-use std::thread;
-
-use clap::Parser;
+use std::{
+    fs::{self, File},
+    io::{self, BufReader},
+    path::PathBuf,
+    process::{self, Command},
+    thread,
+};
 
 #[derive(Parser)]
 struct Args {
+    #[arg(default_value_t =String::from("./"))]
     path: String,
 
     #[arg(default_value_t = 60)]
@@ -17,6 +19,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     log: bool,
+
+    #[arg(long, default_value_t = false)]
+    kill: bool,
 }
 
 fn main() {
@@ -24,25 +29,33 @@ fn main() {
 
     let seconds = args.seconds;
 
+    if args.kill {
+        let _ = Command::new("pkill").arg("sorm").spawn();
+    }
+
+    OsStr::default();
+
     println!("{}", seconds);
     let read_dir = match fs::read_dir(&args.path) {
         Ok(d) => d,
         Err(_) => {
             print!("path not found");
-            exit(0)
+            process::exit(0)
         }
     };
     let mut lists: Vec<PathBuf> = Vec::new();
     for music in read_dir {
-        let music = music.unwrap().path();
+        if let Ok(music) = music {
+            let music = music.path();
 
-        if music.to_str().unwrap().to_string().ends_with(".mp3") {
-            lists.push(music)
+            if music.to_str().unwrap().to_string().ends_with(".mp3") {
+                lists.push(music)
+            }
         }
     }
-    if lists.len() == 0 {
+    if lists.is_empty() {
         print!("mp3 not found");
-        exit(0)
+        process::exit(0)
     }
 
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
@@ -52,18 +65,17 @@ fn main() {
         let source = Decoder::new(file).unwrap();
         let r = rand::thread_rng().gen_range(1..=seconds);
         let _ = stream_handle.play_raw(source.convert_samples());
+
         if args.log {
             println!(
                 "playing {}",
-                &lists[rand_sound].as_os_str().to_str().unwrap().to_string()
+                &lists[rand_sound].to_str().unwrap().to_string()
             );
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(r as u64))
+        thread::sleep(std::time::Duration::from_secs(r as u64))
     });
-    loop {
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("what?");
-        break;
-    }
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).expect("what?");
 }
